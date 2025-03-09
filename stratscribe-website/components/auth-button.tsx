@@ -29,7 +29,7 @@ export function AuthButton({ provider, label, icon, variant = "outline", disable
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: process.env.NEXT_PUBLIC_SITE_URL + '/auth/callback',
+          redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       })
 

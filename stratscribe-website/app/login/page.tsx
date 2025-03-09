@@ -62,7 +62,7 @@ export default function LoginPage() {
           email,
           password,
           options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL + '/auth/callback',
+            redirectTo: `${window.location.origin}/api/auth/callback`,
           },
         });
         if (error) throw error;
