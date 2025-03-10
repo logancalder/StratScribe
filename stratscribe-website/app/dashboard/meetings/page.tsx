@@ -40,13 +40,16 @@ export default function DashboardPage() {
   const [envError, setEnvError] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClientComponentClient();
   const dataFetchedRef = useRef(false);
 
   useEffect(() => {
     // Prevent multiple fetches
-    if (dataFetchedRef.current || isLoading || !user?.id) return;
+    if (dataFetchedRef.current || isLoading || !user?.email) return;
     
     const fetchData = async () => {
       try {
@@ -64,11 +67,40 @@ export default function DashboardPage() {
         // Fetch user data from API
         const uid = user?.id;
         const response = await fetch(`/api/user?uid=${uid}`);
-        console.log("uid: ", uid);
+        console.log("uid MEETINGS: ", uid);
         
         if (response.ok) {
           const data = await response.json();
           setUserData(data);
+          
+          // Fetch meetings data
+          const { data: meetingsData, error: meetingsError } = await supabase
+            .from('meetings')
+            .select('*')
+            .eq('userID', uid);
+            
+          if (meetingsError) {
+            console.error("Error fetching meetings:", meetingsError);
+          } else {
+            setMeetings(meetingsData || []);
+            
+            // If meetings exist, fetch notes for the first meeting
+            if (meetingsData && meetingsData.length > 0) {
+              setSelectedMeeting(meetingsData[0].meetingID);
+              
+              const { data: notesData, error: notesError } = await supabase
+                .from('notes')
+                .select('*')
+                .eq('meetingID', meetingsData[0].meetingID);
+                
+              if (notesError) {
+                console.error("Error fetching notes:", notesError);
+              } else {
+                setNotes(notesData || []);
+              }
+            }
+          }
+          
           dataFetchedRef.current = true;
         }
       } catch (error) {
@@ -81,10 +113,41 @@ export default function DashboardPage() {
     fetchData();
   }, [user, isLoading]);
 
+  const handleMeetingSelect = async (meetingID: string) => {
+    setSelectedMeeting(meetingID);
+    setIsLoading(true);
+    
+    try {
+      const { data: notesData, error: notesError } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('meetingID', meetingID);
+        
+      if (notesError) {
+        console.error("Error fetching notes:", notesError);
+      } else {
+        setNotes(notesData || []);
+      }
+    } catch (error) {
+      console.error("Error fetching notes:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
   const handleSignOut = () => {
     signOut();
   };
-
+  
   if (!loading && !user) {
     router.push('/login');
   }
@@ -127,16 +190,16 @@ export default function DashboardPage() {
               <nav className="grid items-start px-4 text-sm font-medium">
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
                 >
                   <Home className="h-4 w-4" />
                   Dashboard
                 </Link>
                 <Link
                   href="/dashboard/meetings"
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
+                  className="flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all"
                 >
-                  <Package className="h-4 w-4" />
+                  <Calendar className="h-4 w-4" />
                   Meetings
                 </Link>
                 <Link
@@ -181,7 +244,6 @@ export default function DashboardPage() {
             </Link>
             <div className="w-full flex-1">
               <h1 className="font-semibold text-lg">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Hello, {user?.user_metadata?.name || user?.email?.split('@')[0] || 'there'}!</p>
             </div>
             <ThemeToggle />
             <DropdownMenu>
@@ -246,17 +308,17 @@ export default function DashboardPage() {
             <nav className="grid items-start px-4 text-sm font-medium">
               <Link
                 href="/dashboard"
-                className="flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
               >
                 <Home className="h-4 w-4" />
                 Dashboard
               </Link>
               <Link
-                href="/dashboard/meetings"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
-              >
-                <Calendar className="h-4 w-4" />
-                Meetings
+                  href="/dashboard/meetings"
+                  className="flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Meetings
               </Link>
               <Link
                 href="/dashboard/analysis"
@@ -328,171 +390,120 @@ export default function DashboardPage() {
           </DropdownMenu>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
-          <h2 className="text-3xl font-bold ">
-            Hello, <span className="text-primary font-bold">{user?.user_metadata?.name 
-              ? user.user_metadata.name.split('#')[0] 
-              : user?.email?.split('@')[0] || 'there'}</span>! Ready to start recording?
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Meetings</h2>
+            <Button>New Meeting</Button>
+          </div>
+          
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
+          ) : meetings.length === 0 ? (
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Recordings
-                </CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{userData?.totalRecordings || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  {userData?.totalRecordings ? `${userData.totalRecordings} recordings` : "No recordings yet"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Recording Hours
-                </CardTitle>
-                <LineChart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{userData?.monthlyHours || 0}h</div>
-                <p className="text-xs text-muted-foreground">
-                  {userData?.plan === "Free" 
-                    ? `${Math.round((userData?.monthlyHours || 0) / 5 * 100)}% of your monthly limit`
-                    : userData?.plan === "Pro" 
-                      ? `${Math.round((userData?.monthlyHours || 0) / 30 * 100)}% of your monthly limit`
-                      : "Unlimited plan"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Team Members
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">1</div>
-                <p className="text-xs text-muted-foreground">Just you so far</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Current Plan
-                </CardTitle>
-                <Image 
-                  src="/transparent_logo.png" 
-                  alt="StratScribe Logo" 
-                  width={26} 
-                  height={26} 
-                  className="h-7 w-auto text-muted-foreground"
-                />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {userData?.plan ? userData.plan.charAt(0).toUpperCase() + userData.plan.slice(1) : "Free"}
+              <CardContent className="flex flex-col items-center justify-center space-y-3 py-12">
+                <div className="rounded-full bg-muted p-3">
+                  <Users className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {userData?.plan !== "team" && (
-                    <>
-                      <Link href="/get-started" className="text-primary">
-                        Upgrade
-                      </Link>{" "}
-                      for more features
-                    </>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-lg font-medium">No meetings yet</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Create your first meeting to get started
+                  </p>
+                </div>
+                <Button>Create Meeting</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-7">
+              <Card className="md:col-span-3">
+                <CardHeader>
+                  <CardTitle>Your Meetings</CardTitle>
+                  <CardDescription>
+                    Select a meeting to view its notes
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {meetings.map((meeting) => (
+                      <div 
+                        key={meeting.meetingID}
+                        className={`p-3 rounded-lg cursor-pointer ${
+                          selectedMeeting === meeting.meetingID 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted hover:bg-muted/80'
+                        }`}
+                        onClick={() => handleMeetingSelect(meeting.meetingID)}
+                      >
+                        <div className="font-medium">{meeting.title}</div>
+                        <div className="text-sm truncate">
+                          {meeting.description || 'No description'}
+                        </div>
+                        <div className="text-xs mt-1">
+                          {formatDate(meeting.date)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="md:col-span-4">
+                <CardHeader>
+                  <CardTitle>
+                    {selectedMeeting 
+                      ? meetings.find(m => m.meetingID === selectedMeeting)?.title || 'Meeting Notes' 
+                      : 'Meeting Notes'}
+                  </CardTitle>
+                  <CardDescription>
+                    {selectedMeeting 
+                      ? `${notes.length} note${notes.length === 1 ? '' : 's'} for this meeting` 
+                      : 'Select a meeting to view notes'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!selectedMeeting ? (
+                    <div className="flex flex-col items-center justify-center space-y-3 py-12">
+                      <div className="rounded-full bg-muted p-3">
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Select a meeting from the list to view its notes
+                        </p>
+                      </div>
+                    </div>
+                  ) : notes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center space-y-3 py-12">
+                      <div className="rounded-full bg-muted p-3">
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground">
+                          No notes for this meeting yet
+                        </p>
+                      </div>
+                      <Button>Add Note</Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {notes.map((note) => (
+                        <Card key={note.noteID}>
+                          <CardContent className="p-4">
+                            <div className="whitespace-pre-wrap">{note.content}</div>
+                            <div className="text-xs text-muted-foreground mt-2">
+                              {formatDate(note.createdAt)}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      <Button className="w-full">Add Note</Button>
+                    </div>
                   )}
-                  {userData?.plan === "team" && "Enterprise plan"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Card className="col-span-4">
-              <CardHeader>
-                <CardTitle>Getting Started</CardTitle>
-                <CardDescription>
-                  Follow these steps to set up StratScribe for your team
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    1
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      Add StratScribe to Discord
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Invite the StratScribe bot to your Discord server
-                    </p>
-                  </div>
-                  <div className="ml-auto">
-                    <Button>Add to Discord</Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    2
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      Connect to Voice Channel
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Join a voice channel and activate StratScribe before your
-                      scrim
-                    </p>
-                  </div>
-                  <div className="ml-auto">
-                    <Button variant="outline">View Guide</Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    3
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      Invite Team Members
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Add your teammates to access recordings and analysis
-                    </p>
-                  </div>
-                  <div className="ml-auto">
-                    <Button variant="outline">Invite Team</Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="col-span-3">
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>
-                  Your recent recordings and analysis
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col items-center justify-center space-y-3 py-6">
-                  <div className="rounded-full bg-muted p-3">
-                    <Package className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <div className="space-y-1 text-center">
-                    <h3 className="text-lg font-medium">No recordings yet</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Your recordings will appear here once you start using
-                      StratScribe
-                    </p>
-                  </div>
-                  <Button>Start Recording</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </main>
       </div>
     </div>

@@ -121,7 +121,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="mx-auto flex w-full max-w-[500px] flex-col justify-center">
-                <div className="aspect-video overflow-hidden rounded-xl border bg-background">
+                <div className="overflow-hidden rounded-xl border bg-background">
                   <Image
                     src="/demo.png"
                     width={800}
