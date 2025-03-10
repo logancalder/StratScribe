@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createSupabaseClient } from "@/utils/supabase/client";
+import { supabase } from "@/utils/supabase/client";
 
 type AuthContextType = {
   user: any;
@@ -21,7 +21,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [uid, setUid] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createSupabaseClient();
   const initialCheckDone = useRef(false);
 
   useEffect(() => {

@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
 
   try {
     // First check if the user exists in the database
-    
     const { data: userData, error: userError } = await supabase
       .from('userData')
       .select('*')

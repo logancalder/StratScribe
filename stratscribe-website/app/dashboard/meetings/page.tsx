@@ -32,19 +32,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createClientComponentClient } from "@/lib/supabase";
+import { supabase } from "@/utils/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function DashboardPage() {
   const { user, loading, signOut } = useAuth();
-  const [envError, setEnvError] = useState(false);
-  const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filteredNotes, setFilteredNotes] = useState<any[]>([]);
   const router = useRouter();
-  const supabase = createClientComponentClient();
   const dataFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -55,52 +54,14 @@ export default function DashboardPage() {
       try {
         setIsLoading(true);
         
-        // Check if environment variables are set
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-        if (!supabaseUrl || !supabaseAnonKey) {
-          setEnvError(true);
-          return;
-        }
-        
         // Fetch user data from API
         const uid = user?.id;
-        const response = await fetch(`/api/user?uid=${uid}`);
-        console.log("uid MEETINGS: ", uid);
+        const response = await fetch(`/api/meeting?uid=${uid}`);
+        console.log("uid: ", uid);
         
         if (response.ok) {
           const data = await response.json();
-          setUserData(data);
-          
-          // Fetch meetings data
-          const { data: meetingsData, error: meetingsError } = await supabase
-            .from('meetings')
-            .select('*')
-            .eq('userID', uid);
-            
-          if (meetingsError) {
-            console.error("Error fetching meetings:", meetingsError);
-          } else {
-            setMeetings(meetingsData || []);
-            
-            // If meetings exist, fetch notes for the first meeting
-            if (meetingsData && meetingsData.length > 0) {
-              setSelectedMeeting(meetingsData[0].meetingID);
-              
-              const { data: notesData, error: notesError } = await supabase
-                .from('notes')
-                .select('*')
-                .eq('meetingID', meetingsData[0].meetingID);
-                
-              if (notesError) {
-                console.error("Error fetching notes:", notesError);
-              } else {
-                setNotes(notesData || []);
-              }
-            }
-          }
-          
+          setMeetings(data);
           dataFetchedRef.current = true;
         }
       } catch (error) {
@@ -108,28 +69,64 @@ export default function DashboardPage() {
       } finally {
         setIsLoading(false);
       }
-    };
+    }; 
 
     fetchData();
   }, [user, isLoading]);
 
+  useEffect(() => {
+    // Filter notes based on search query
+    if (notes.length > 0) {
+      if (searchQuery.trim() === "") {
+        setFilteredNotes(notes);
+      } else {
+        const filtered = notes.filter(note => 
+          note.content.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        setFilteredNotes(filtered);
+      }
+    } else {
+      setFilteredNotes([]);
+    }
+  }, [searchQuery, notes]);
+
   const handleMeetingSelect = async (meetingID: string) => {
     setSelectedMeeting(meetingID);
     setIsLoading(true);
+    setSearchQuery(""); // Reset search when changing meetings
     
     try {
-      const { data: notesData, error: notesError } = await supabase
-        .from('notes')
+      console.log("meetingID type:", typeof meetingID, "value:", meetingID);
+      console.log("Converted meetingID:", Number(meetingID));
+
+      
+      const { data: notesData, error: notesError } = await supabase.from('notes')
         .select('*')
-        .eq('meetingID', meetingID);
-        
+        .eq('meetingID', meetingID)
+        .order('createdAt', { ascending: false });
+      
       if (notesError) {
         console.error("Error fetching notes:", notesError);
-      } else {
-        setNotes(notesData || []);
+        setNotes([]);
+        setFilteredNotes([]);
+        return;
       }
+      
+      if (!notesData) {
+        console.log("No notes data returned");
+        setNotes([]);
+        setFilteredNotes([]);
+        return;
+      }
+
+      console.log("Notes data received:", notesData);
+      setNotes(notesData || []);
+      setFilteredNotes(notesData || []);
+      
     } catch (error) {
-      console.error("Error fetching notes:", error);
+      console.error("Error in try-catch:", error);
+      setNotes([]);
+      setFilteredNotes([]);
     } finally {
       setIsLoading(false);
     }
@@ -165,7 +162,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (user && !userData) {
+  if (user && !meetings) {
     return (
       <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
         <div className="hidden border-r bg-muted/40 lg:block">
@@ -283,6 +280,18 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  // Helper function to highlight search terms
+  const highlightSearchTerms = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === query.toLowerCase() 
+        ? <span key={i} className="bg-yellow-200 text-black px-1 rounded">{part}</span> 
+        : part
+    );
+  };
 
   return (
     <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
@@ -460,6 +469,32 @@ export default function DashboardPage() {
                       ? `${notes.length} note${notes.length === 1 ? '' : 's'} for this meeting` 
                       : 'Select a meeting to view notes'}
                   </CardDescription>
+                  {selectedMeeting && notes.length > 0 && (
+                    <div className="mt-2">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search notes..."
+                          className="w-full px-3 py-2 border rounded-md bg-background"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                          <button 
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
+                            onClick={() => setSearchQuery("")}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      {searchQuery && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Found {filteredNotes.length} result{filteredNotes.length !== 1 ? 's' : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   {!selectedMeeting ? (
@@ -487,16 +522,28 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {notes.map((note) => (
-                        <Card key={note.noteID}>
-                          <CardContent className="p-4">
-                            <div className="whitespace-pre-wrap">{note.content}</div>
-                            <div className="text-xs text-muted-foreground mt-2">
-                              {formatDate(note.createdAt)}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                      {filteredNotes.length === 0 && searchQuery ? (
+                        <div className="text-center py-8">
+                          <p className="text-muted-foreground">No notes match your search</p>
+                        </div>
+                      ) : (
+                        filteredNotes.map((note) => (
+                          <Card key={note.noteID}>
+                            <CardContent className="p-4">
+                              <div className="whitespace-pre-wrap">
+                                {searchQuery ? (
+                                  highlightSearchTerms(note.content, searchQuery)
+                                ) : (
+                                  note.content
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2">
+                                {formatDate(note.createdAt)}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
                       <Button className="w-full">Add Note</Button>
                     </div>
                   )}
