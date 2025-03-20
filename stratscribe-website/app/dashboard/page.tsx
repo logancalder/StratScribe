@@ -61,10 +61,19 @@ export default function DashboardPage() {
           return;
         }
         
-        // Fetch user data from API
+        // Get Discord ID from user metadata
+        const discordId = user?.user_metadata?.sub || user?.user_metadata?.provider_id;
         const uid = user?.id;
-        const response = await fetch(`/api/user?uid=${uid}`);
-        console.log("uid: ", uid);
+
+        // Make sure we have both uid and discordId
+        if (!uid || !discordId) {
+          console.error("Missing uid or discordId");
+          return;
+        }
+        
+        // Fetch user data from API using both IDs
+        const response = await fetch(`/api/user?uid=${uid}&discord_id=${discordId}`);
+        console.log("Fetching with uid:", uid, "and discordId:", discordId);
         
         if (response.ok) {
           const data = await response.json();
@@ -356,12 +365,12 @@ export default function DashboardPage() {
                 <LineChart className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{userData?.monthlyHours || 0}h</div>
+                <div className="text-2xl font-bold">{userData?.monthlySeconds || 0}h</div>
                 <p className="text-xs text-muted-foreground">
                   {userData?.plan === "Free" 
-                    ? `${Math.round((userData?.monthlyHours || 0) / 5 * 100)}% of your monthly limit`
+                    ? `${Math.round((userData?.monthlySeconds || 0) / 5 * 100)}% of your monthly limit`
                     : userData?.plan === "Pro" 
-                      ? `${Math.round((userData?.monthlyHours || 0) / 30 * 100)}% of your monthly limit`
+                      ? `${Math.round((userData?.monthlySeconds || 0) / 30 * 100)}% of your monthly limit`
                       : "Unlimited plan"}
                 </p>
               </CardContent>

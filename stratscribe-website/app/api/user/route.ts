@@ -3,19 +3,21 @@ import { supabase } from '@/utils/supabase/server';
 
 export async function GET(request: NextRequest) {
   const uid = request.nextUrl.searchParams.get('uid');
+  const discord_id = request.nextUrl.searchParams.get('discord_id');
   
-  if (!uid) {
-    return NextResponse.json({ error: 'uid parameter is required' }, { status: 400 });
+  if (!uid && !discord_id) {
+    return NextResponse.json({ error: 'Either uid or discord_id parameter is required' }, { status: 400 });
   }
+
+  console.log("Fetching with uid:", uid, "and discordId:", discord_id);
 
   try {
     // First check if the user exists in the database
     const { data: userData, error: userError } = await supabase
       .from('userData')
       .select('*')
-      .eq('userID', uid)
+      .or(`userID.eq.${uid},discordID.eq.${discord_id}`)
       .single();
-    
     if (userError) {
       // console.log(uid);
       console.log('User not found, creating new user');
@@ -28,7 +30,8 @@ export async function GET(request: NextRequest) {
             { 
               userID: uid, 
               totalRecordings: 0, 
-              monthlyHours: 0, 
+              monthlySeconds: 0,
+              discordID: discord_id,
               plan: 'Free' 
             }
           ]);
@@ -39,8 +42,9 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ 
             userID: uid, 
             totalRecordings: 0, 
-            monthlyHours: 0, 
+            monthlySeconds: 0, 
             plan: 'Free',
+            discordID: discord_id,
             isDefaultData: true
           });
         }
@@ -49,8 +53,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(newUser?.[0] || { 
           userID: uid, 
           totalRecordings: 0, 
-          monthlyHours: 0, 
+          monthlySeconds: 0, 
           plan: 'Free',
+          discordID: discord_id,
           isDefaultData: true
         });
       } catch (insertError) {
@@ -59,14 +64,34 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ 
           userID: uid, 
           totalRecordings: 0, 
-          monthlyHours: 0, 
+          monthlySeconds: 0, 
           plan: 'Free',
+          discordID: discord_id,
           isDefaultData: true
         });
       }
     }
     
     console.log('User found, returning user data');
+    // Update user data if missing fields
+    if (userData) {
+      const updates: any = {};
+      if (!userData.userID && uid) updates.userID = uid;
+      if (!userData.discordID && discord_id) updates.discordID = discord_id;
+      
+      if (Object.keys(updates).length > 0) {
+        console.log("Updating user data");
+        const { data: updatedUser, error: updateError } = await supabase
+          .from('userData')
+          .update(updates)
+          .or(`userID.eq.${uid},discordID.eq.${discord_id}`)
+          .single();
+          
+        if (!updateError && updatedUser) {
+          return NextResponse.json(updatedUser);
+        }
+      }
+    }
     return NextResponse.json(userData);
   } catch (error) {
     console.error('Error processing request:', error);
@@ -74,8 +99,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       userID: uid, 
       totalRecordings: 0, 
-      monthlyHours: 0, 
+      monthlySeconds: 0, 
       plan: 'Free',
+      discordID: discord_id,
       isDefaultData: true
     });
   }
