@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const { user, loading, signOut } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [userData, setUserData] = useState<any>(null);
   const [notes, setNotes] = useState<any[]>([]);
   const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -56,7 +57,23 @@ export default function DashboardPage() {
         
         // Fetch user data from API
         const uid = user?.id;
-        const response = await fetch(`/api/meeting?uid=${uid}`);
+        const userResponse = await fetch(`/api/user?uid=${uid}`);
+        if(userResponse.ok) {
+          const userData = await userResponse.json();
+          setUserData(userData);
+        }
+
+        const discordId = userData?.discordID;
+
+        if(!discordId) {
+          console.error("Missing discordId. User should link their account.");
+        }
+
+        if(!discordId && !uid) {
+          console.error("Missing uid and discordId");
+        }
+
+        const response = await fetch(`/api/meeting?uid=${uid}&discord_id=${discordId}`);
         console.log("uid: ", uid);
         
         if (response.ok) {

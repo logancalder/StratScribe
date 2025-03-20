@@ -66,11 +66,11 @@ export default function DashboardPage() {
         const uid = user?.id;
 
         // Make sure we have both uid and discordId
-        if (!uid || !discordId) {
-          console.error("Missing uid or discordId");
+        if (!uid && !discordId) {
+          console.error("Missing uid and discordId");
           return;
         }
-        
+
         // Fetch user data from API using both IDs
         const response = await fetch(`/api/user?uid=${uid}&discord_id=${discordId}`);
         console.log("Fetching with uid:", uid, "and discordId:", discordId);
