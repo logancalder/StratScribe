@@ -21,17 +21,21 @@
 # Clone the repository
 git clone https://github.com/yourusername/stratscribe.git
 cd stratscribe
+npm install --legacy-peer-deps
 ```
 
 ## 🔧 Usage
 ```sh
-# Run StratScribe
-python main.py
+# Run StratScribe Website (localhost)
+npm run dev
 ```
 
-For integration with Discord:
+## 🔧 Build
+Since the GitHub repository is linked to Vercel, any push to the main branch will automatically deploy, assuming it passes the build checks.
 ```sh
-python bot.py
+# To generate a production build
+npm run build
+git push
 ```
 
 ## 📞 Contact
